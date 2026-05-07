@@ -7,7 +7,9 @@
 
 ### Team Members
 - Jasmin Spinetto ([Jasmin Spinetto](https://github.com/JasminSpinetto))
-- Camilo A. Martínez-Mejía ([Camilo A. Martínez-Mejía] (https://github.com/camiloa2m))
+- Camilo A. Martínez-Mejía ([Camilo A. Martínez-Mejía](https://github.com/camiloa2m))
+- Martin
+- Rey
 
 ---
 
