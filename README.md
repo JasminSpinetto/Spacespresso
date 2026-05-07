@@ -30,28 +30,54 @@ To ensure reproducibility, we recommend using a virtual environment. Follow thes
 git clone https://github.com/<your-org>/<your-repo>
 cd <your-repo>
 ```
+### Hardware-Specifications
+All training and inference must be fully reproducible on **Google Colab** using a **T4 GPU runtime**
+(`Runtime → Change runtime type → T4 GPU`).
 
-### Create a Conda virtual environment
-```bash
-conda env create -f environment.yml
-conda activate adl_project
-```
+| Component | Spec |
+|-----------|------|
+| GPU | NVIDIA Tesla T4 |
+| Architecture | Turing (TU104) |
+| CUDA Cores | 2,560 |
+| Tensor Cores | 320 (multi-precision: FP32 / FP16 / INT8 / INT4) |
+| RT Cores | 40 |
+| VRAM | 16 GB GDDR6 (**~15 GB usable** — 1 GB reserved for ECC) |
+| Memory Bandwidth | 320 GB/s |
+| Memory Interface | 256-bit |
+| GPU Clock (boost) | up to 1590 MHz |
+| FP32 Performance | 8.1 TFLOPS |
+| FP16 / Mixed Precision | ~65 TFLOPS |
+| TDP | 70 W |
+| System RAM | ~12–13 GB |
+| CPU | Intel Xeon (2 vCPUs) |
+| Disk | ~70 GB (ephemeral) |
 
-### Hardware-Specific PyTorch Installation
+### Key Constraints
 
-> Run **only one** of the following sections depending on your hardware.
+- **~15 GB usable VRAM** — models must fit within this budget. Use 4-bit quantization or gradient
+  checkpointing for larger backbones.
+- **Ephemeral storage** — the runtime filesystem resets between sessions. Mount Google Drive or
+  re-download the dataset at the start of each session.
+- **Session time limits** — free-tier sessions can disconnect after periods of inactivity or extended
+  use. Save checkpoints frequently.
+- **GPU not guaranteed** — free-tier users may occasionally be assigned an older GPU (e.g. K80).
+  Colab Pro offers more consistent T4 access.
 
-#### A. Users with NVIDIA GPU
+For these reasons, we suggest developing your solution locally, if you have a GPU available, and then testing it on Colab.
+
+### Tips for Staying Within VRAM
+
+- Use **mixed precision** (`torch.cuda.amp`) to halve memory usage with minimal accuracy loss.
+- Reduce batch size and accumulate gradients if you hit OOM errors.
+- Clear unused tensors explicitly (`del tensor; torch.cuda.empty_cache()`).
+- Prefer **4-bit quantized** model configs (see configs marked `4-bit` in the table above) when
+  working with larger backbones.
+
+#### Local NVIDIA GPU
 ```bash
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 ```
 > CUDA 11.8 is compatible with the vast majority of NVIDIA GPUs. If installation fails, check your driver version with `nvidia-smi` and visit the [official PyTorch page](https://pytorch.org/get-started/locally/) for alternatives.
-
-#### B. Users without a GPU (CPU only)
-```bash
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-```
-> Running deep learning models on CPU is significantly slower. If you do not have a compatible NVIDIA GPU, we strongly recommend using Google Colab with a GPU runtime.
 
 ## Dataset Structure
 
