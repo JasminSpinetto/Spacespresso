@@ -15,7 +15,7 @@
 
 ## Project Overview
 
-> *Milan Space Center, 14 days before the rocket launch.*
+> *Milan Space Center, 14 days before the rocket launch. Milan Space Center, 14 days before the rocket launch. The Italian Space Agency is ready to go, but the logistics department has made a catastrophic mess. We’ve just received our final shipment of supplies for the mission to Mars: mechanical gears, electronic components, and most importantly our survival stash of coffee beans and Bronte pistachios for the onboard gelato machine. The problem? The manufacturing facility sent us a batch riddled with defects. If even one bad coffee bean hits the grinder, the crew will revolt. The launch is in 14 days. Your task is to build an anomaly detection system to filter out every single faulty piece before we blast off. Identify the broken components, save the gelato, and ensure the espresso is impeccable!*
 
 This repository contains the development and implementation of the ADL anomaly detection challenge for A.Y. 2025/2026 — **Mission: Spacepresso**. The task is to build a pixel-level anomaly detection system capable of identifying defective items (mechanical gears, electronic components, coffee beans, and Bronte pistachios) in a mixed batch of manufacturing products. The system is evaluated using **Pixel-Level Average Precision (AP)** and must be fully reproducible on Google Colab.
 
