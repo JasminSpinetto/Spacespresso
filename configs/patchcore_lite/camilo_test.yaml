@@ -1,0 +1,30 @@
+seed: 44
+
+experiment:
+  name: patchcore_lite_camilo_test
+  owner: camilo
+  output_dir: outputs/camilo/patchcore_lite_camilo_test
+
+data:
+  root: /content/data/spacepresso
+  image_size: 224
+  load_images: true
+
+method:
+  name: patchcore_lite
+  backbone: wide_resnet50_2
+  batch_size: 4
+  out_indices: [2, 3]
+  coreset_fraction: 0.01
+  candidate_pool_size: 8000
+  max_coreset_size: 2000
+  projection_dim: 512
+  bank_chunk_size: 2048
+  sigma: 4.0
+
+training:
+  enabled: true
+  mode: fit_memory_bank
+
+submission:
+  output_path: submissions/camilo/patchcore_lite_camilo_test.csv

@@ -1,0 +1,6 @@
+id,owner,method,config,status,public_score,notes
+001,juan,patchcore_lite,configs/patchcore_lite/juan_baseline.yaml,planned,,baseline using PatchCore Lite from uploaded MVTec notebook
+002,jasmin,patchcore_lite,configs/patchcore_lite/jasmin_test.yaml,planned,,alternate PatchCore config
+003,camilo,patchcore_lite,configs/patchcore_lite/camilo_test.yaml,planned,,alternate PatchCore config
+004,reinaldo,patchcore_lite,configs/patchcore_lite/reinaldo_test.yaml,planned,,alternate PatchCore config
+005,juan,patchcore_lite,configs/patchcore_lite/juan_tuning.yaml,planned,,Optuna tuning on held-out clean folds plus labeled train anomalies

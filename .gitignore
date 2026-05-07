@@ -1,9 +1,25 @@
-# Dataset (1.4 GB — download via Kaggle)
-data/
+# Data
+data/*
+!data/
+!data/spacepresso/
+data/spacepresso/**
+!data/spacepresso/.gitkeep
 
-# Results & logs
-results/
-logs/
+# Outputs and submissions
+outputs/**/*
+!outputs/**/
+!outputs/**/.gitkeep
+submissions/**/*.csv
+submissions/**/*.zip
+
+# Checkpoints and model weights
+checkpoints/
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.onnx
 
 # Python
 __pycache__/
@@ -16,34 +32,26 @@ dist/
 build/
 .eggs/
 
-# Virtual environments
+# Virtual environments and secrets
 .env
-.venv
+.venv/
 env/
 venv/
 *.conda
-*.egg
+kaggle.json
 
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# IDE
+# Experiment trackers
+wandb/
+mlruns/
+
+# IDE and OS
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# OS
 .DS_Store
 Thumbs.db
-
-# Model weights & checkpoints
-*.pt
-*.pth
-*.ckpt
-*.bin
-*.safetensors
-
-# Kaggle credentials
-kaggle.json

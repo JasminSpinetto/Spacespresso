@@ -1,0 +1,21 @@
+seed: 42
+
+experiment:
+  name: pretrained_features_camilo
+  owner: camilo
+  output_dir: outputs/camilo/pretrained_features_camilo
+
+data:
+  root: /content/data/spacepresso
+  image_size: 224
+  load_images: true
+
+method:
+  name: pretrained_features
+
+training:
+  enabled: true
+  mode: fit_features
+
+submission:
+  output_path: submissions/camilo/pretrained_features_camilo.csv

@@ -1,0 +1,21 @@
+seed: 42
+
+experiment:
+  name: autoencoder_jasmin
+  owner: jasmin
+  output_dir: outputs/jasmin/autoencoder_jasmin
+
+data:
+  root: /content/data/spacepresso
+  image_size: 224
+  load_images: true
+
+method:
+  name: autoencoder
+
+training:
+  enabled: true
+  mode: train
+
+submission:
+  output_path: submissions/jasmin/autoencoder_jasmin.csv

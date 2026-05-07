@@ -1,0 +1,21 @@
+seed: 42
+
+experiment:
+  name: synthetic_unet_reinaldo
+  owner: reinaldo
+  output_dir: outputs/reinaldo/synthetic_unet_reinaldo
+
+data:
+  root: /content/data/spacepresso
+  image_size: 224
+  load_images: true
+
+method:
+  name: synthetic_unet
+
+training:
+  enabled: true
+  mode: train
+
+submission:
+  output_path: submissions/reinaldo/synthetic_unet_reinaldo.csv
