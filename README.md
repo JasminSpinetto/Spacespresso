@@ -9,7 +9,7 @@
 - Jasmin Spinetto ([Jasmin Spinetto](https://github.com/JasminSpinetto))
 - Camilo A. Martínez-Mejía ([Camilo A. Martínez-Mejía](https://github.com/camiloa2m))
 - Martin
-- Rey
+- Reinaldo Toledo ([Reinaldo Toledo](https://github.com/Rey7910))
 
 ---
 
