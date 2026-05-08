@@ -192,6 +192,24 @@ def _knn_search(query, bank, bank_chunk_size: int):
 
     return best_dist
 
+#-----------------------------------------------------------------------------------------------------
+# BACKGROUNG POST_PROCESSING
+def _compute_foreground_mask(image_np: np.ndarray, threshold: float, dilation: int) -> np.ndarray:
+    from scipy.ndimage import binary_fill_holes, binary_dilation
+    gray = image_np.mean(axis=2)
+    fg = binary_fill_holes(gray > threshold)
+    if dilation > 0:
+        fg = binary_dilation(fg, iterations=dilation)
+    return fg.astype(np.float32)
+
+
+def _downsample_mask_to_grid(mask: np.ndarray, h: int, w: int) -> np.ndarray:
+    H, W = mask.shape
+    ph, pw = H // h, W // w
+    return mask[:ph * h, :pw * w].reshape(h, ph, w, pw).any(axis=(1, 3)).reshape(-1)
+
+#-----------------------------------------------------------------------------------------------------
+
 def _normalize_maps(raw_predictions: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     if not raw_predictions:
         return {}
@@ -248,6 +266,10 @@ class Method(BaseMethod):
         self.bank_chunk_size = int(method_config.get("bank_chunk_size", 2048))
         self.sigma = float(method_config.get("sigma", 4.0))
         self.class_wise = bool(method_config.get("class_wise", True))
+        self.no_background = bool(method_config.get("no_background", False))
+        self.bg_threshold = float(method_config.get("bg_threshold", 0.20))
+        self.bg_dilation = int(method_config.get("bg_dilation", 16))
+        self.bg_threshold_per_class = dict(method_config.get("bg_threshold_per_class", {}))
 
         backbone = method_config.get("backbone", "wide_resnet50_2")
         candidates = method_config.get("backbone_candidates")
@@ -369,6 +391,17 @@ class Method(BaseMethod):
                 _, h, w, channels = embeddings.shape
                 self.feature_grid_shape = (h, w)
                 flat_embeddings = embeddings.reshape(-1, channels).detach().cpu().float()
+                if self.no_background:   #ignores background during training (because it hold no info and wastes memory bank space)
+                    images_np = batch["image"].permute(0, 2, 3, 1).cpu().numpy()
+                    class_name = batch["class_name"][0]
+                    threshold = self.bg_threshold_per_class.get(class_name, self.bg_threshold)
+                    patch_mask = np.concatenate([
+                        _downsample_mask_to_grid(
+                            _compute_foreground_mask(img, threshold, self.bg_dilation), h, w
+                        )
+                        for img in images_np
+                    ])
+                    flat_embeddings = flat_embeddings[patch_mask]
                 n_total += int(flat_embeddings.shape[0])
                 candidate_bank, candidate_keys = self._update_candidate_pool(
                     candidate_bank=candidate_bank,
