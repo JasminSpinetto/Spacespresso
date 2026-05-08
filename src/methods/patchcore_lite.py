@@ -192,7 +192,6 @@ def _knn_search(query, bank, bank_chunk_size: int):
 
     return best_dist
 
-
 def _normalize_maps(raw_predictions: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     if not raw_predictions:
         return {}
