@@ -36,6 +36,7 @@ img_000001_view2,q8rle 224 224 0 120 255 10 0 50046
 - ID: image identifier.
 - Label: anomaly score map encoded as a `q8rle` string.
 To reduce upload size, you may also submit the CSV compressed as a .zip file.
+Your submission should be a CSV or Parquet file with 5910 rows and a header. You can upload a zip/gz/7z/tar archive.
 
 ### q8rle encoding
 We use a quantized 8-bit run-length encoding called `q8rle`.

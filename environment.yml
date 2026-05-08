@@ -1,0 +1,26 @@
+name: adl_project
+
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.11
+  - pip
+  - numpy
+  - pandas
+  - matplotlib
+  - pyyaml
+  - scikit-learn
+  - scipy
+  - tqdm
+  - pillow
+  - ipykernel
+  - pytorch
+  - torchvision
+  - pip:
+      - opencv-python
+      - timm
+      - optuna
