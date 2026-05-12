@@ -1,0 +1,29 @@
+seed: 43
+
+experiment:
+  name: student_teacher_jasmin
+  owner: jasmin
+  output_dir: outputs/jasmin/student_teacher
+
+data:
+  root: /content/data/spacepresso
+  image_size: 224
+  load_images: false
+
+method:
+  name: student_teacher
+  patch_sizes: [17]         # single scale; add 33 or 65 for multi-scale (slower)
+  n_students: 3
+  student_epochs: 5
+  student_lr: 1.0e-4
+  weight_decay: 1.0e-5
+  student_batch_size: 8
+  teacher_patch_batch_size: 2048
+  teacher_stride: 4             # stride for teacher patch extraction (1=full, 4=16x faster)
+  student_input_size: 112       # downsample student input to this size (null = full 224, 112 = 4x faster conv layers)
+  sigma: 4.0
+  class_wise: true
+  cal_fraction: 0.1         # fraction of train data held out for score calibration
+
+submission:
+  output_path: submissions/jasmin/student_teacher_jasmin.csv
