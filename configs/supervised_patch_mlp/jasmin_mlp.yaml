@@ -22,7 +22,9 @@ method:
   weight_decay: 1.0e-5
   focal_gamma: 2.0            # focal loss focusing exponent
   focal_alpha: ~              # null = auto-computed from class ratio (recommended)
-  normal_patches_per_image: 50  # subsample normal patches to avoid RAM exhaustion
+  augment_anomalies: true       # rotate anomalous images 0/90/180/270° → 4x more examples
+  normal_patches_per_image: 50  # initial subsample of normal patches per image
+  max_imbalance_ratio: 10       # after subsampling, further cap normal:anomalous to this ratio
                                 # 19000 images × 50 patches × 1536 dims × 4B ≈ 5.8 GB
   sigma: 4.0
   class_wise: true

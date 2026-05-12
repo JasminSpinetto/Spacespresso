@@ -95,10 +95,23 @@ def _load_image(path, image_size):
 
 
 def _load_mask(mask_path, grid_h, grid_w):
-    """Load GT mask, downsample to patch grid resolution. Returns (grid_h, grid_w) bool array."""
+    """Load GT mask at patch grid resolution. Returns (grid_h, grid_w) bool array."""
     with Image.open(mask_path) as im:
         im = im.convert("L").resize((grid_w, grid_h), resample=Image.NEAREST)
-        return (np.asarray(im) > 0).reshape(-1)  # (grid_h*grid_w,)
+        return (np.asarray(im) > 0)  # (grid_h, grid_w)
+
+
+# Rotationally symmetric classes — all 4 rotations are valid augmentations
+_ROTATION_4 = {"class_03", "class_05", "class_06", "class_07"}
+# Orientation-sensitive classes — only 180° is safe (object stays upright)
+_ROTATION_2 = {"class_01", "class_02", "class_04", "class_08"}
+
+
+def _rotations_for_class(class_name: str) -> list[int]:
+    """Return list of rot90 k-values (0=0°, 1=90°, 2=180°, 3=270°) for this class."""
+    if class_name in _ROTATION_4:
+        return [0, 1, 2, 3]
+    return [0, 2]  # 0° and 180° only
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +226,8 @@ class Method(BaseMethod):
         self.focal_gamma          = float(mc.get("focal_gamma", 2.0))
         self.focal_alpha          = mc.get("focal_alpha", None)
         self.normal_patches_per_image = int(mc.get("normal_patches_per_image", 50))
+        self.augment_anomalies        = bool(mc.get("augment_anomalies", True))
+        self.max_imbalance_ratio      = int(mc.get("max_imbalance_ratio", 10))
         self.sigma                = float(mc.get("sigma", 4.0))
         self.class_wise      = bool(mc.get("class_wise", True))
 
@@ -273,28 +288,56 @@ class Method(BaseMethod):
             flat_feats = patch_feats.reshape(B, H * W, C).cpu()
 
             for i in range(B):
-                label      = int(batch["label"][i].item())
-                mask_path  = batch["mask_path"][i]
-                patch_flat = flat_feats[i]  # (H*W, C)
+                label     = int(batch["label"][i].item())
+                mask_path = batch["mask_path"][i]
+                img_i     = batch["image"][i]  # (3, H_img, W_img)
 
                 if label == 1 and mask_path:
-                    # Anomalous image: keep ALL patches with their GT labels
-                    patch_labels = torch.from_numpy(
-                        _load_mask(mask_path, H, W).astype(np.float32)
-                    )
-                    all_feats.append(patch_flat)
-                    all_labels.append(patch_labels)
+                    # Anomalous image: augment with class-appropriate rotations
+                    mask_grid = _load_mask(mask_path, H, W)  # (H, W) bool
+                    class_name = batch["class_name"][i]
+                    ks = _rotations_for_class(class_name) if self.augment_anomalies else [0]
+                    for k in ks:
+                        img_rot  = torch.rot90(img_i, k, dims=[1, 2])         # rotate image
+                        mask_rot = np.rot90(mask_grid, k)                      # rotate mask
+
+                        rot_feats = _extract_features(
+                            self.model, self.mean, self.std,
+                            img_rot.unsqueeze(0), self.patchsize, self.device
+                        )  # (1, H, W, C)
+                        rot_flat = rot_feats.reshape(H * W, C).cpu()
+                        patch_labels = torch.from_numpy(
+                            mask_rot.reshape(-1).astype(np.float32)
+                        )
+                        all_feats.append(rot_flat)
+                        all_labels.append(patch_labels)
                 else:
                     # Normal image: randomly subsample to limit memory
                     n_keep = min(self.normal_patches_per_image, H * W)
                     idx = torch.randperm(H * W)[:n_keep]
-                    all_feats.append(patch_flat[idx])
+                    all_feats.append(flat_feats[i][idx])
                     all_labels.append(torch.zeros(n_keep, dtype=torch.float32))
 
         feats  = torch.cat(all_feats,  dim=0)  # (N_patches, C)
         labels = torch.cat(all_labels, dim=0)  # (N_patches,)
         n_pos  = int(labels.sum().item())
-        print(f"  Patch dataset: {len(labels):,} patches | {n_pos:,} anomalous ({100*n_pos/len(labels):.2f}%)")
+        n_neg  = len(labels) - n_pos
+
+        # Oversample anomalous patches to reach target imbalance ratio
+        max_ratio = int(getattr(self, "max_imbalance_ratio", 10))
+        if n_pos > 0 and n_neg > n_pos * max_ratio:
+            # Keep all anomalous patches; subsample normal to max_ratio * n_pos
+            n_neg_keep = n_pos * max_ratio
+            neg_idx = torch.where(labels == 0)[0]
+            keep    = neg_idx[torch.randperm(len(neg_idx))[:n_neg_keep]]
+            pos_idx = torch.where(labels == 1)[0]
+            all_idx = torch.cat([pos_idx, keep])
+            feats   = feats[all_idx]
+            labels  = labels[all_idx]
+            n_neg   = n_neg_keep
+
+        n_pos = int(labels.sum().item())
+        print(f"  Patch dataset: {len(labels):,} patches | {n_pos:,} anomalous ({100*n_pos/len(labels):.2f}%) | ratio={n_neg//max(n_pos,1)}:1")
 
         # Compute normalization stats from normal patches only
         normal_feats = feats[labels == 0]
@@ -309,7 +352,7 @@ class Method(BaseMethod):
         # Compute alpha from class ratio if not set manually
         n_pos   = float(labels.sum().item())
         n_total = float(len(labels))
-        alpha   = float(self.focal_alpha) if self.focal_alpha is not None else (1.0 - n_pos / n_total)
+        alpha   = float(self.focal_alpha) if self.focal_alpha is not None else min(0.95, 1.0 - n_pos / n_total)
         gamma   = self.focal_gamma
         print(f"  Focal loss: alpha={alpha:.3f}, gamma={gamma}")
 
