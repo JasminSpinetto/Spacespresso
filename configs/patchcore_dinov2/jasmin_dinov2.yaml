@@ -1,0 +1,33 @@
+seed: 43
+
+experiment:
+  name: patchcore_dinov2_jasmin
+  owner: jasmin
+  output_dir: outputs/jasmin/patchcore_dinov2
+
+data:
+  root: /content/data/spacepresso
+  image_size: 224
+  load_images: false
+
+method:
+  name: patchcore_lite
+  backbone: vit_base_patch14_dinov2.lvd142m  # DINOv2 ViT-B/14 — swap for vit_small_patch14_dinov2.lvd142m to save VRAM
+  batch_size: 8
+  out_indices: [8, 11]   # transformer blocks 8 and 11 (ViT-B has 12 blocks total)
+  coreset_fraction: 0.01
+  candidate_pool_size: 6000
+  max_coreset_size: 2000
+  projection_dim: 512
+  bank_chunk_size: 2048
+  sigma: 4.0
+
+training:
+  enabled: true
+  mode: fit_memory_bank
+
+ranking:
+  output_path: outputs/validation_rankings.csv
+
+submission:
+  output_path: submissions/jasmin/patchcore_dinov2_jasmin.csv

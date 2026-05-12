@@ -1,0 +1,31 @@
+seed: 43
+
+experiment:
+  name: supervised_patch_mlp_jasmin
+  owner: jasmin
+  output_dir: outputs/jasmin/supervised_patch_mlp
+
+data:
+  root: /content/data/spacepresso
+  image_size: 224
+  load_images: false
+
+method:
+  name: supervised_patch_mlp
+  backbone: wide_resnet50_2   # same as PatchCore baseline
+  batch_size: 8
+  out_indices: [2, 3]
+  patchsize: 3
+  mlp_hidden: 256
+  mlp_epochs: 20
+  mlp_lr: 1.0e-3
+  weight_decay: 1.0e-5
+  focal_gamma: 2.0            # focal loss focusing exponent
+  focal_alpha: ~              # null = auto-computed from class ratio (recommended)
+  normal_patches_per_image: 50  # subsample normal patches to avoid RAM exhaustion
+                                # 19000 images × 50 patches × 1536 dims × 4B ≈ 5.8 GB
+  sigma: 4.0
+  class_wise: true
+
+submission:
+  output_path: submissions/jasmin/supervised_patch_mlp_jasmin.csv

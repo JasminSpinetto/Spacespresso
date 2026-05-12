@@ -140,6 +140,72 @@ def _create_feature_extractor(
     return TimmFeatureExtractor().to(device).eval()
 
 
+def _create_vit_feature_extractor(backbone_name: str, out_indices: tuple, image_size: tuple, device):
+    """Feature extractor for ViT-based backbones (DINOv2, ViT).
+
+    ViTs output patch tokens (B, N, C) instead of spatial maps (B, C, H, W).
+    This extractor hooks into specified transformer blocks and reshapes tokens
+    back to (B, C, H, W) so the rest of PatchCore works unchanged.
+    """
+    _require_dependencies()
+
+    class ViTFeatureExtractor(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.backbone_name = backbone_name
+            self.model = timm.create_model(
+                backbone_name, pretrained=True, num_classes=0, img_size=image_size[0]
+            ).to(device)
+            for p in self.model.parameters():
+                p.requires_grad_(False)
+            self.model.eval()
+
+            self.out_indices = tuple(out_indices)
+            self._hooked: dict[int, "torch.Tensor"] = {}
+
+            # Register hooks on transformer blocks
+            for idx in self.out_indices:
+                self.model.blocks[idx].register_forward_hook(self._make_hook(idx))
+
+            # Compute spatial grid size from patch embedding
+            ps = self.model.patch_embed.patch_size
+            ps = ps[0] if isinstance(ps, (list, tuple)) else int(ps)
+            h, w = image_size
+            self.grid_h = h // ps
+            self.grid_w = w // ps
+            self.n_prefix = int(getattr(self.model, "num_prefix_tokens", 1))
+
+            self.register_buffer("mean", torch.tensor(IMAGENET_MEAN).view(1, 3, 1, 1).to(device), persistent=False)
+            self.register_buffer("std",  torch.tensor(IMAGENET_STD ).view(1, 3, 1, 1).to(device), persistent=False)
+
+            # Validate
+            with torch.no_grad():
+                self.forward(torch.zeros(1, 3, h, w, device=device))
+            print(f"Using ViT backbone: {backbone_name} | patch grid={self.grid_h}×{self.grid_w}")
+
+        def _make_hook(self, idx: int):
+            def hook(module, inp, output):
+                self._hooked[idx] = output[:, self.n_prefix:, :]  # strip CLS/register tokens
+            return hook
+
+        def forward(self, x):
+            self._hooked = {}
+            self.model((x - self.mean) / self.std)
+            result = []
+            for idx in self.out_indices:
+                feat = self._hooked[idx]              # (B, N, C)
+                B, N, C = feat.shape
+                feat = feat.reshape(B, self.grid_h, self.grid_w, C).permute(0, 3, 1, 2)
+                result.append(feat.contiguous())       # (B, C, H, W)
+            return result
+
+    return ViTFeatureExtractor().to(device).eval()
+
+
+def _is_vit_backbone(name: str) -> bool:
+    return any(k in name.lower() for k in ("vit", "dinov2", "dino"))
+
+
 def _random_project(points, out_dim: int | None, seed: int):
     if out_dim is None or points.shape[1] <= int(out_dim):
         return points
@@ -266,6 +332,7 @@ class Method(BaseMethod):
         self.bank_chunk_size = int(method_config.get("bank_chunk_size", 2048))
         self.sigma = float(method_config.get("sigma", 4.0))
         self.class_wise = bool(method_config.get("class_wise", True))
+        self.view_wise  = bool(method_config.get("view_wise", False))
         self.no_background = bool(method_config.get("no_background", False))
         self.bg_threshold = float(method_config.get("bg_threshold", 0.20))
         self.bg_dilation = int(method_config.get("bg_dilation", 16))
@@ -282,12 +349,21 @@ class Method(BaseMethod):
             requested_device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = torch.device(requested_device)
 
-        self.feature_extractor = _create_feature_extractor(
-            self.backbone_candidates,
-            self.out_indices,
-            self.image_size,
-            self.device,
-        )
+        primary_backbone = self.backbone_candidates[0]
+        if _is_vit_backbone(primary_backbone):
+            self.feature_extractor = _create_vit_feature_extractor(
+                primary_backbone,
+                self.out_indices,
+                self.image_size,
+                self.device,
+            )
+        else:
+            self.feature_extractor = _create_feature_extractor(
+                self.backbone_candidates,
+                self.out_indices,
+                self.image_size,
+                self.device,
+            )
         self.backbone_name = self.feature_extractor.backbone_name
         self.memory_banks: dict[str, Any] = {}
         self.feature_grid_shape: tuple[int, int] | None = None
@@ -297,10 +373,10 @@ class Method(BaseMethod):
         if not clean_samples:
             raise ValueError("PatchCore Lite requires at least one clean training image")
 
-        grouped = self._group_samples(clean_samples) if self.class_wise else {GLOBAL_BANK_KEY: clean_samples}
-        for class_name, samples in grouped.items():
-            print(f"Fitting PatchCore memory bank for {class_name}: {len(samples)} images")
-            self.memory_banks[class_name] = self._fit_memory_bank(samples)
+        grouped = self._group_samples(clean_samples, self.class_wise, self.view_wise)
+        for key, samples in grouped.items():
+            print(f"Fitting PatchCore memory bank for {key}: {len(samples)} images")
+            self.memory_banks[key] = self._fit_memory_bank(samples)
         return self
 
     def predict(self, test_data) -> dict[str, np.ndarray]:
@@ -308,13 +384,16 @@ class Method(BaseMethod):
             raise RuntimeError("PatchCore Lite has not been fitted yet")
 
         samples = list(test_data)
-        grouped = self._group_samples(samples) if self.class_wise else {GLOBAL_BANK_KEY: samples}
+        grouped = self._group_samples(samples, self.class_wise, self.view_wise)
         raw_predictions: dict[str, np.ndarray] = {}
-        for class_name, class_samples in grouped.items():
-            bank_key = class_name if self.class_wise else GLOBAL_BANK_KEY
-            if bank_key not in self.memory_banks:
-                raise RuntimeError(f"No PatchCore memory bank found for class '{class_name}'")
-            raw_predictions.update(self._predict_with_bank(class_samples, self.memory_banks[bank_key]))
+        for key, key_samples in grouped.items():
+            if key not in self.memory_banks:
+                # fall back to class-only bank if view-specific bank missing
+                fallback = key.split("__")[0] if "__" in key else key
+                if fallback not in self.memory_banks:
+                    raise RuntimeError(f"No PatchCore memory bank found for '{key}'")
+                key = fallback
+            raw_predictions.update(self._predict_with_bank(key_samples, self.memory_banks[key]))
         return _normalize_maps(raw_predictions)
 
     def save(self, output_dir: str | Path):
@@ -339,10 +418,16 @@ class Method(BaseMethod):
         return self
 
     @staticmethod
-    def _group_samples(samples) -> dict[str, list]:
+    def _group_samples(samples, class_wise: bool = True, view_wise: bool = False) -> dict[str, list]:
         grouped: dict[str, list] = {}
         for sample in samples:
-            grouped.setdefault(sample.class_name, []).append(sample)
+            if not class_wise:
+                key = GLOBAL_BANK_KEY
+            elif view_wise:
+                key = f"{sample.class_name}__{sample.view_id}"
+            else:
+                key = sample.class_name
+            grouped.setdefault(key, []).append(sample)
         return grouped
 
     def _make_loader(self, samples, shuffle: bool = False):
