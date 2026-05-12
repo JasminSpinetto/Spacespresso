@@ -23,3 +23,9 @@ If inference is slow, process multiple views together. Batch them, patch them, o
 *“One object, five gazes. Alone, each eye is incomplete.”*
 
 Each sample comes with five views. Treating them as unrelated images may be easy, but not always wise. A defect may reveal itself through comparison, agreement, or contradiction between views. The object is one, even when the camera speaks five times. 
+
+# Advice 6
+“To find the broken gear, first remember the healthy machine.”
+
+The normal images are your teacher. PatchCore-like methods, memory banks, and feature distances are strong starting points. Store healthy patches; distrust what lies far from them. Sometimes the best detector is simply a good memory. 
+
