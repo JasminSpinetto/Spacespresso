@@ -107,11 +107,16 @@ _ROTATION_4 = {"class_03", "class_05", "class_06", "class_07"}
 _ROTATION_2 = {"class_01", "class_02", "class_04", "class_08"}
 
 
-def _rotations_for_class(class_name: str) -> list[int]:
-    """Return list of rot90 k-values (0=0°, 1=90°, 2=180°, 3=270°) for this class."""
-    if class_name in _ROTATION_4:
-        return [0, 1, 2, 3]
-    return [0, 2]  # 0° and 180° only
+def _augmentations_for_class(class_name: str) -> list[tuple[int, bool]]:
+    """Return (k_rot90, flip_horizontal) pairs for this class.
+
+    Horizontal flip is added to each rotation — vertical flip arises naturally
+    as flip_H(rot180) and is NOT added separately to avoid duplication.
+    Symmetric classes get 4 rotations × 2 flips = 8 unique transforms (D4 group).
+    Oriented classes get 2 rotations × 2 flips = 4 unique transforms.
+    """
+    k_values = [0, 1, 2, 3] if class_name in _ROTATION_4 else [0, 2]
+    return [(k, flip) for k in k_values for flip in (False, True)]
 
 
 # ---------------------------------------------------------------------------
@@ -136,11 +141,11 @@ def _focal_loss(logits: "torch.Tensor", targets: "torch.Tensor",
 # ---------------------------------------------------------------------------
 
 class _MLP(nn.Module):
-    def __init__(self, in_dim: int, hidden: int = 256):
+    def __init__(self, in_dim: int, hidden: int = 256, dropout: float = 0.2):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(in_dim, hidden), nn.ReLU(),
-            nn.Linear(hidden, hidden), nn.ReLU(),
+            nn.Linear(in_dim, hidden), nn.ReLU(), nn.Dropout(dropout),
+            nn.Linear(hidden, hidden), nn.ReLU(), nn.Dropout(dropout),
             nn.Linear(hidden, 1),
         )
 
@@ -228,6 +233,10 @@ class Method(BaseMethod):
         self.normal_patches_per_image = int(mc.get("normal_patches_per_image", 50))
         self.augment_anomalies        = bool(mc.get("augment_anomalies", True))
         self.max_imbalance_ratio      = int(mc.get("max_imbalance_ratio", 10))
+        self.mlp_dropout              = float(mc.get("mlp_dropout", 0.2))
+        self.hard_negative_mining     = bool(mc.get("hard_negative_mining", True))
+        self.hnm_epochs               = int(mc.get("hnm_epochs", 10))
+        self.hnm_ratio                = int(mc.get("hnm_ratio", 3))  # hard negatives per anomalous patch
         self.sigma                = float(mc.get("sigma", 4.0))
         self.class_wise      = bool(mc.get("class_wise", True))
 
@@ -253,7 +262,19 @@ class Method(BaseMethod):
             feats, labels, f_mean, f_std = self._build_patch_dataset(samples)
             self.feat_norms[key] = (f_mean, f_std)
             feats = (feats - f_mean) / f_std          # normalize before training
-            self.mlps[key] = self._train_mlp(feats, labels, key)
+
+            # First training pass
+            mlp = self._train_mlp(feats, labels, key, self.mlp_epochs)
+
+            # Hard negative mining: find normal patches the MLP scores highest
+            if self.hard_negative_mining:
+                feats, labels = self._mine_hard_negatives(mlp, feats, labels)
+                print(f"  HNM: retrain with {int(labels.sum()):,} anomalous + "
+                      f"{int((labels == 0).sum()):,} normal ({self.hnm_epochs} epochs)")
+                mlp = self._train_mlp(feats, labels, key, self.hnm_epochs,
+                                      init_state=mlp.state_dict())
+
+            self.mlps[key] = mlp
         return self
 
     def predict(self, test_data) -> dict[str, np.ndarray]:
@@ -278,6 +299,8 @@ class Method(BaseMethod):
         )
         all_feats  = []
         all_labels = []
+        generator  = torch.Generator()
+        generator.manual_seed(self.seed)
 
         for batch in tqdm(loader, desc="Extracting patch features", leave=False):
             images    = batch["image"]
@@ -293,28 +316,28 @@ class Method(BaseMethod):
                 img_i     = batch["image"][i]  # (3, H_img, W_img)
 
                 if label == 1 and mask_path:
-                    # Anomalous image: augment with class-appropriate rotations
-                    mask_grid = _load_mask(mask_path, H, W)  # (H, W) bool
+                    mask_grid  = _load_mask(mask_path, H, W)  # (H, W) bool
                     class_name = batch["class_name"][i]
-                    ks = _rotations_for_class(class_name) if self.augment_anomalies else [0]
-                    for k in ks:
-                        img_rot  = torch.rot90(img_i, k, dims=[1, 2])         # rotate image
-                        mask_rot = np.rot90(mask_grid, k)                      # rotate mask
+                    augments   = _augmentations_for_class(class_name) if self.augment_anomalies else [(0, False)]
+                    for k, do_flip in augments:
+                        img_aug  = torch.rot90(img_i, k, dims=[1, 2])
+                        mask_aug = np.rot90(mask_grid, k)
+                        if do_flip:
+                            img_aug  = torch.flip(img_aug, dims=[2])   # horizontal flip
+                            mask_aug = np.fliplr(mask_aug)
 
-                        rot_feats = _extract_features(
+                        aug_feats = _extract_features(
                             self.model, self.mean, self.std,
-                            img_rot.unsqueeze(0), self.patchsize, self.device
+                            img_aug.unsqueeze(0), self.patchsize, self.device
                         )  # (1, H, W, C)
-                        rot_flat = rot_feats.reshape(H * W, C).cpu()
-                        patch_labels = torch.from_numpy(
-                            mask_rot.reshape(-1).astype(np.float32)
-                        )
-                        all_feats.append(rot_flat)
-                        all_labels.append(patch_labels)
+                        all_feats.append(aug_feats.reshape(H * W, C).cpu())
+                        all_labels.append(torch.from_numpy(
+                            mask_aug.reshape(-1).astype(np.float32)
+                        ))
                 else:
                     # Normal image: randomly subsample to limit memory
                     n_keep = min(self.normal_patches_per_image, H * W)
-                    idx = torch.randperm(H * W)[:n_keep]
+                    idx = torch.randperm(H * W, generator=generator)[:n_keep]
                     all_feats.append(flat_feats[i][idx])
                     all_labels.append(torch.zeros(n_keep, dtype=torch.float32))
 
@@ -329,7 +352,7 @@ class Method(BaseMethod):
             # Keep all anomalous patches; subsample normal to max_ratio * n_pos
             n_neg_keep = n_pos * max_ratio
             neg_idx = torch.where(labels == 0)[0]
-            keep    = neg_idx[torch.randperm(len(neg_idx))[:n_neg_keep]]
+            keep    = neg_idx[torch.randperm(len(neg_idx), generator=generator)[:n_neg_keep]]
             pos_idx = torch.where(labels == 1)[0]
             all_idx = torch.cat([pos_idx, keep])
             feats   = feats[all_idx]
@@ -345,9 +368,33 @@ class Method(BaseMethod):
         f_std  = normal_feats.std(dim=0).clamp(min=1e-6)
         return feats, labels, f_mean, f_std
 
-    def _train_mlp(self, feats, labels, key):
-        mlp = _MLP(self.feat_dim, self.mlp_hidden).to(self.device)
+    @torch.no_grad()
+    def _mine_hard_negatives(self, mlp, feats, labels):
+        """Score all normal patches, keep the hardest ones alongside all anomalous patches."""
+        mlp.eval()
+        neg_idx = torch.where(labels == 0)[0]
+        neg_feats = feats[neg_idx].to(self.device)
+
+        scores = torch.cat([
+            torch.sigmoid(mlp(neg_feats[i : i + 4096]))
+            for i in range(0, len(neg_feats), 4096)
+        ]).cpu()
+
+        n_hard = int(labels.sum().item()) * self.hnm_ratio
+        _, hard_rel = torch.topk(scores, min(n_hard, len(scores)))
+        hard_idx    = neg_idx[hard_rel]
+
+        # New dataset: all anomalous + all hard negatives
+        pos_idx  = torch.where(labels == 1)[0]
+        keep     = torch.cat([pos_idx, hard_idx])
+        return feats[keep], labels[keep]
+
+    def _train_mlp(self, feats, labels, key, epochs, init_state=None):
+        mlp = _MLP(self.feat_dim, self.mlp_hidden, self.mlp_dropout).to(self.device)
+        if init_state is not None:
+            mlp.load_state_dict(init_state)  # warm-start from previous pass
         optimizer = torch.optim.Adam(mlp.parameters(), lr=self.mlp_lr, weight_decay=self.weight_decay)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(epochs, 1), eta_min=1e-6)
 
         # Compute alpha from class ratio if not set manually
         n_pos   = float(labels.sum().item())
@@ -362,7 +409,7 @@ class Method(BaseMethod):
         best_loss  = float("inf")
         best_state = None
 
-        for epoch in range(1, self.mlp_epochs + 1):
+        for epoch in range(1, epochs + 1):
             mlp.train()
             epoch_loss = []
             for xb, yb in loader:
@@ -372,8 +419,9 @@ class Method(BaseMethod):
                 loss.backward()
                 optimizer.step()
                 epoch_loss.append(loss.item())
+            scheduler.step()
             mean_loss = float(np.mean(epoch_loss))
-            print(f"  [{key}] MLP epoch {epoch:02d}/{self.mlp_epochs} | loss={mean_loss:.5f}")
+            print(f"  [{key}] MLP epoch {epoch:02d}/{epochs} | loss={mean_loss:.5f} | lr={scheduler.get_last_lr()[0]:.2e}")
             if mean_loss < best_loss:
                 best_loss  = mean_loss
                 best_state = {k: v.clone() for k, v in mlp.state_dict().items()}

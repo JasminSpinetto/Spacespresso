@@ -29,3 +29,9 @@ Each sample comes with five views. Treating them as unrelated images may be easy
 
 The normal images are your teacher. PatchCore-like methods, memory banks, and feature distances are strong starting points. Store healthy patches; distrust what lies far from them. Sometimes the best detector is simply a good memory. 
 
+# Advice 7
+“The first tool that works is not the final weapon. Many lenses, the defect may require.”
+
+PatchCore is a strong beginning, not the whole kingdom. Look also at PaDiM, FastFlow, DRAEM, CFA, RD4AD, UniAD, EfficientAD, or student-teacher methods. Some remember normality, some reconstruct, some distill, some learn flows. Let different families compete before the final ensemble is crowned.
+
+

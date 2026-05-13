@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(python -c ' *)",
-      "Bash(conda run *)"
+      "Bash(conda run *)",
+      "Bash(python notebooks/_gen_standalone.py)",
+      "Bash(del \"c:\\\\Users\\\\PC\\\\Desktop\\\\GITHUB REPO\\\\Spacespresso\\\\notebooks\\\\_gen_standalone.py\")"
     ]
   }
 }

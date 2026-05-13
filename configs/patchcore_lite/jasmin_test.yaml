@@ -8,7 +8,7 @@ experiment:
 data:
   root: /content/data/spacepresso
   image_size: 224
-  load_images: true
+  load_images: false
 
 method:
   name: patchcore_lite
@@ -20,11 +20,14 @@ method:
   max_coreset_size: 2000
   projection_dim: 512
   bank_chunk_size: 2048
-  sigma: 3.0
+  sigma: 4.0
 
 training:
   enabled: true
   mode: fit_memory_bank
+
+ranking:
+  output_path: outputs/validation_rankings.csv
 
 submission:
   output_path: submissions/jasmin/patchcore_lite_jasmin_test.csv
