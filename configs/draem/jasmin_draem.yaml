@@ -1,0 +1,31 @@
+seed: 43
+
+experiment:
+  name: draem_jasmin
+  owner: jasmin
+  output_dir: outputs/jasmin/draem
+
+data:
+  root: /content/data/spacepresso
+  image_size: 224          # must be divisible by 16; 224 = 14x16 ✓
+  load_images: false
+
+method:
+  name: draem
+  batch_size: 8
+  epochs: 50
+  normals_per_epoch: 300   # normals sampled per epoch per class (null = all ~2400, slow)
+  lr: 1.0e-4
+  weight_decay: 1.0e-5
+  unet_base: 32            # reconstructor capacity (32 → ~7.7M params)
+  disc_base: 16            # discriminator capacity (16 → ~2M params)
+  lambda_recon: 1.0        # weight of reconstruction loss (MSE + 0.1*L1)
+  lambda_disc: 2.0         # weight of discriminator loss
+  focal_gamma: 2.0
+  focal_alpha: ~           # auto-computed from GT mask pixel fraction
+  sigma: 2.0
+  class_wise: true
+  log_every: 10            # print loss every N epochs
+
+submission:
+  output_path: submissions/jasmin/draem_jasmin.csv

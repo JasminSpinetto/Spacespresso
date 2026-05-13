@@ -277,7 +277,7 @@ class Method(BaseMethod):
             self.mlps[key] = mlp
         return self
 
-    def predict(self, test_data) -> dict[str, np.ndarray]:
+    def predict(self, test_data, tta: bool = False) -> dict[str, np.ndarray]:
         if not self.mlps:
             raise RuntimeError("Call fit() before predict()")
         samples = list(test_data)
@@ -285,8 +285,11 @@ class Method(BaseMethod):
         raw: dict[str, np.ndarray] = {}
         for key, key_samples in grouped.items():
             mlp_key = key if key in self.mlps else GLOBAL_KEY
-            raw.update(self._predict_class(key_samples, self.mlps[mlp_key],
-                                           self.feat_norms[mlp_key]))
+            if tta:
+                print(f"TTA inference [{key}] ({len(key_samples)} images)...")
+                raw.update(self._predict_class_tta(key_samples, self.mlps[mlp_key], self.feat_norms[mlp_key]))
+            else:
+                raw.update(self._predict_class(key_samples, self.mlps[mlp_key], self.feat_norms[mlp_key]))
         return _normalize_maps(raw)
 
     # ------------------------------------------------------------------
@@ -463,6 +466,57 @@ class Method(BaseMethod):
                     amap = gaussian_filter(amap, sigma=self.sigma).astype(np.float32)
                 predictions[str(image_id)] = amap.astype(np.float16)
 
+        return predictions
+
+    @torch.no_grad()
+    def _predict_class_tta(self, samples, mlp, feat_norm) -> dict[str, np.ndarray]:
+        """Predict with test-time augmentation: average over D4/Klein-4 transforms."""
+        predictions = {}
+        f_mean, f_std = feat_norm
+        f_mean = f_mean.to(self.device)
+        f_std  = f_std.to(self.device)
+        mlp.eval()
+
+        for s in tqdm(samples, desc="MLP inference (TTA)", leave=False):
+            img        = _load_image(s.image_path, self.image_size)
+            img_tensor = torch.from_numpy(img).permute(2, 0, 1).float()
+            augments   = _augmentations_for_class(s.class_name)
+
+            # Build batch of all augmented versions
+            aug_tensors = []
+            for k, do_flip in augments:
+                aug = torch.rot90(img_tensor, k, dims=[1, 2])
+                if do_flip:
+                    aug = torch.flip(aug, dims=[2])
+                aug_tensors.append(aug)
+
+            aug_batch   = torch.stack(aug_tensors)  # (n_aug, 3, H, W)
+            patch_feats = _extract_features(self.model, self.mean, self.std,
+                                            aug_batch, self.patchsize, self.device)
+            B, H, W, C  = patch_feats.shape
+            flat        = (patch_feats.reshape(B * H * W, C) - f_mean) / f_std
+            scores      = torch.sigmoid(mlp(flat)).reshape(B, H, W)
+            scores_up   = F.interpolate(
+                scores.unsqueeze(1), size=self.image_size,
+                mode="bilinear", align_corners=False).squeeze(1)
+
+            # Reverse each transform and collect
+            aug_preds = []
+            for idx, (k, do_flip) in enumerate(augments):
+                pred = scores_up[idx].cpu().numpy().astype(np.float32)
+                if do_flip:
+                    pred = np.fliplr(pred)
+                pred = np.ascontiguousarray(np.rot90(pred, -k % 4))
+                aug_preds.append(pred)
+
+            amap = np.mean(aug_preds, axis=0).astype(np.float32)
+            if self.sigma > 0:
+                amap = gaussian_filter(amap, sigma=self.sigma).astype(np.float32)
+            predictions[str(s.image_id)] = amap.astype(np.float16)
+
+        cls = samples[0].class_name if samples else "?"
+        n_aug = len(_augmentations_for_class(cls))
+        print(f"  TTA [{cls}] done: {len(samples)} images × {n_aug} augments")
         return predictions
 
     @staticmethod

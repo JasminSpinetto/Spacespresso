@@ -4,7 +4,11 @@
       "Bash(python -c ' *)",
       "Bash(conda run *)",
       "Bash(python notebooks/_gen_standalone.py)",
-      "Bash(del \"c:\\\\Users\\\\PC\\\\Desktop\\\\GITHUB REPO\\\\Spacespresso\\\\notebooks\\\\_gen_standalone.py\")"
+      "Bash(del \"c:\\\\Users\\\\PC\\\\Desktop\\\\GITHUB REPO\\\\Spacespresso\\\\notebooks\\\\_gen_standalone.py\")",
+      "Bash('C:\\\\Users\\\\PC\\\\anaconda3\\\\envs\\\\adl_project\\\\python.exe' -c ' *)",
+      "Bash(\"C:\\\\Users\\\\PC\\\\anaconda3\\\\envs\\\\adl_project\\\\python.exe\" \"c:\\\\Users\\\\PC\\\\Desktop\\\\GITHUB REPO\\\\Spacespresso\\\\notebooks\\\\_patch_nb.py\")",
+      "Bash(del \"c:\\\\Users\\\\PC\\\\Desktop\\\\GITHUB REPO\\\\Spacespresso\\\\notebooks\\\\_patch_nb.py\")",
+      "Bash(\"C:\\\\Users\\\\PC\\\\anaconda3\\\\envs\\\\adl_project\\\\python.exe\" \"c:\\\\Users\\\\PC\\\\Desktop\\\\GITHUB REPO\\\\Spacespresso\\\\notebooks\\\\_patch2.py\")"
     ]
   }
 }
