@@ -41,7 +41,14 @@ def show_samples(samples, n: int = 5):
     return fig
 
 
-def show_predictions(samples, predictions: dict[str, np.ndarray], n: int = 5):
+def show_predictions(
+    samples,
+    predictions: dict[str, np.ndarray],
+    n: int = 5,
+    *,
+    autoscale: bool = False,
+    show_stats: bool = False,
+):
     import matplotlib.pyplot as plt
 
     shown = [sample for sample in list(samples) if sample.image_id in predictions][:n]
@@ -61,9 +68,23 @@ def show_predictions(samples, predictions: dict[str, np.ndarray], n: int = 5):
         image_ax.set_title(sample.image_id)
         image_ax.axis("off")
 
-        anomaly_map = predictions[sample.image_id]
-        map_ax.imshow(anomaly_map, cmap="magma", vmin=0, vmax=1)
-        map_ax.set_title("anomaly map")
+        anomaly_map = np.asarray(predictions[sample.image_id])
+        if autoscale:
+            vmax = float(np.percentile(anomaly_map, 99.5))
+            if vmax <= 0.0:
+                vmax = 1.0
+            map_ax.imshow(anomaly_map, cmap="magma", vmin=0, vmax=vmax)
+        else:
+            map_ax.imshow(anomaly_map, cmap="magma", vmin=0, vmax=1)
+
+        title = "anomaly map"
+        if show_stats:
+            title += (
+                f"\nmax={float(anomaly_map.max()):.4f}, "
+                f"mean={float(anomaly_map.mean()):.4f}, "
+                f"nz={int(np.count_nonzero(anomaly_map))}"
+            )
+        map_ax.set_title(title)
         map_ax.axis("off")
     fig.tight_layout()
     return fig

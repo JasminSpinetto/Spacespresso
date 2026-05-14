@@ -9,6 +9,7 @@ import pandas as pd
 import yaml
 
 from src.common.evaluation import evaluate_predictions
+from src.common.prediction_processing import process_prediction_maps
 from src.common.ranking import RankingWriter, rank_dataframe, validation_ranking_record
 from src.common.training import ExperimentRunner
 from src.common.validation import make_validation_split
@@ -86,6 +87,7 @@ class OptunaTuner:
             runner = ExperimentRunner(method_cls(config), config)
             runner.fit(split.train_good)
             predictions = runner.predict(split.val_samples)
+            predictions = process_prediction_maps(split.val_samples, predictions, config)
             result = evaluate_predictions(split.val_samples, predictions)
             metrics = result.as_dict()
             fold_metrics.append(metrics)
@@ -318,6 +320,63 @@ def suggest_patchcore_lite_config(trial, config: dict[str, Any]) -> dict[str, An
         trial, "out_indices", search, default_choices=["2,3", "1,2,3"]
     )
     method["out_indices"] = [int(x) for x in str(out_indices).split(",")]
+    return config
+
+
+def suggest_efficientad_dinov2_config(trial, config: dict[str, Any]) -> dict[str, Any]:
+    method = config.setdefault("method", {})
+    search = config.get("tuning", {}).get("search_space", {})
+
+    efficientad_weight = float(
+        _suggest_categorical(
+            trial,
+            "efficientad_weight",
+            search,
+            default_choices=[0.60, 0.70, 0.80, 0.90],
+        )
+    )
+    method["efficientad_weight"] = efficientad_weight
+    method["dinov2_weight"] = float(max(0.0, 1.0 - efficientad_weight))
+    method["learning_rate"] = _suggest_float(
+        trial,
+        "learning_rate",
+        search,
+        default_low=1e-5,
+        default_high=3e-4,
+        log=True,
+    )
+    method["dinov2_bank_size"] = int(
+        _suggest_categorical(
+            trial,
+            "dinov2_bank_size",
+            search,
+            default_choices=[1000, 2000, 4000],
+        )
+    )
+    method["dinov2_candidate_pool_size"] = int(
+        _suggest_categorical(
+            trial,
+            "dinov2_candidate_pool_size",
+            search,
+            default_choices=[3000, 6000, 10000],
+        )
+    )
+    method["efficientad_sigma"] = _suggest_float(
+        trial,
+        "efficientad_sigma",
+        search,
+        default_low=0.0,
+        default_high=4.0,
+        log=False,
+    )
+    method["dinov2_sigma"] = _suggest_float(
+        trial,
+        "dinov2_sigma",
+        search,
+        default_low=0.0,
+        default_high=4.0,
+        log=False,
+    )
     return config
 
 

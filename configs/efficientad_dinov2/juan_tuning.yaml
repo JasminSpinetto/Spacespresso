@@ -1,0 +1,109 @@
+seed: 42
+
+experiment:
+  name: efficientad_dinov2_tuning
+  owner: juan
+  output_dir: outputs/juan/efficientad_dinov2_tuning
+
+data:
+  root: /content/data/spacepresso
+  image_size: 224
+  load_images: false
+
+method:
+  name: efficientad_dinov2
+  batch_size: 4
+  num_workers: 0
+  epochs: 3
+  steps_per_epoch: 1000
+  learning_rate: 0.0001
+  weight_decay: 0.00001
+  teacher_backbone: efficientnet_b0
+  teacher_pretrained: true
+  teacher_out_channels: 384
+  teacher_stats_sample_size: 2000
+  student_base_channels: 64
+  efficientad_sigma: 1.0
+  dinov2_enabled: true
+  dinov2_model: dinov2_vits14
+  dinov2_class_wise: true
+  dinov2_bank_size: 2000
+  dinov2_candidate_pool_size: 6000
+  dinov2_bank_chunk_size: 2048
+  dinov2_coreset: true
+  dinov2_projection_dim: 128
+  dinov2_sigma: 2.0
+  efficientad_weight: 0.75
+  dinov2_weight: 0.25
+  normalization_upper_percentile: 99.5
+
+training:
+  enabled: true
+  mode: efficientad_dinov2
+
+augmentation:
+  enabled: true
+  copies_per_image: 1
+  include_original: true
+  horizontal_flip_probability: 0.5
+  vertical_flip_probability: 0.0
+  max_rotation_degrees: 7.0
+  max_translate_fraction: 0.04
+  scale_range: [0.96, 1.04]
+  brightness: 0.08
+  contrast: 0.08
+  gaussian_noise_std: 0.01
+  blur_probability: 0.15
+  blur_radius_range: [0.2, 0.8]
+  fill_color: [0, 0, 0]
+
+prediction_processing:
+  background_suppression:
+    enabled: true
+    threshold: 0.20
+    dilation: 16
+    threshold_per_class:
+      class_01: 0.40
+      class_08: 0.40
+  connected_components:
+    enabled: true
+    min_component_area: 16
+    strong_component_threshold: 0.15
+    mean_component_threshold: 0.05
+    binary_threshold: 0.01
+    gaussian_sigma: 0.0
+    connectivity: 2
+
+tuning:
+  study_name: efficientad_dinov2_juan
+  direction: maximize
+  metric: pixel_ap
+  n_trials: 10
+  n_splits: 5
+  folds: [0]
+  good_fraction: 0.25
+  anomaly_fraction: 1.0
+  output_dir: outputs/juan/efficientad_dinov2_tuning/optuna
+  search_space:
+    efficientad_weight:
+      choices: [0.60, 0.70, 0.80, 0.90]
+    learning_rate:
+      low: 0.00001
+      high: 0.0003
+      log: true
+    dinov2_bank_size:
+      choices: [1000, 2000, 4000]
+    dinov2_candidate_pool_size:
+      choices: [3000, 6000, 10000]
+    efficientad_sigma:
+      low: 0.0
+      high: 4.0
+    dinov2_sigma:
+      low: 0.0
+      high: 4.0
+
+ranking:
+  output_path: outputs/validation_rankings.csv
+
+submission:
+  output_path: submissions/juan/efficientad_dinov2_tuning_best.csv

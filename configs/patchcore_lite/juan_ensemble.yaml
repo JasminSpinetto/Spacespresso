@@ -1,30 +1,39 @@
 seed: 42
 
 experiment:
-  name: patchcore_lite_baseline
+  name: patchcore_lite_juan_ensemble
   owner: juan
-  output_dir: outputs/juan/patchcore_lite_baseline
+  output_dir: outputs/juan/patchcore_lite_ensemble
 
 data:
   root: /content/data/spacepresso
   image_size: 224
-  load_images: true
+  load_images: false
 
 method:
-  name: patchcore_lite
-  backbone: wide_resnet50_2
-  batch_size: 4
-  out_indices: [2, 3]
-  coreset_fraction: 0.01
-  candidate_pool_size: 6000
-  max_coreset_size: 2000
-  projection_dim: 512
-  bank_chunk_size: 2048
-  sigma: 4.0
+  name: ensemble
+  n_splits: 10
+  select_top_k: 10
+  metric: pixel_ap
+  aggregation: mean
+  good_fraction: 1.0
+  anomaly_fraction: 1.0
+  save_checkpoints: true
+  base_method:
+    name: patchcore_lite
+    backbone: wide_resnet50_2
+    batch_size: 4
+    out_indices: [2, 3]
+    coreset_fraction: 0.01
+    candidate_pool_size: 6000
+    max_coreset_size: 2000
+    projection_dim: 512
+    bank_chunk_size: 2048
+    sigma: 4.0
 
 training:
   enabled: true
-  mode: fit_memory_bank
+  mode: kfold_ensemble
 
 augmentation:
   enabled: true
@@ -59,15 +68,8 @@ prediction_processing:
     gaussian_sigma: 0.0
     connectivity: 2
 
-validation:
-  metric: pixel_ap
-  n_splits: 5
-  fold: 0
-  good_fraction: 0.25
-  anomaly_fraction: 1.0
-
 ranking:
   output_path: outputs/validation_rankings.csv
 
 submission:
-  output_path: submissions/juan/patchcore_lite_baseline.csv
+  output_path: submissions/juan/patchcore_lite_ensemble.csv

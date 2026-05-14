@@ -26,6 +26,39 @@ training:
   enabled: true
   mode: fit_memory_bank
 
+augmentation:
+  enabled: true
+  copies_per_image: 1
+  include_original: true
+  horizontal_flip_probability: 0.5
+  vertical_flip_probability: 0.0
+  max_rotation_degrees: 7.0
+  max_translate_fraction: 0.04
+  scale_range: [0.96, 1.04]
+  brightness: 0.08
+  contrast: 0.08
+  gaussian_noise_std: 0.01
+  blur_probability: 0.15
+  blur_radius_range: [0.2, 0.8]
+  fill_color: [0, 0, 0]
+
+prediction_processing:
+  background_suppression:
+    enabled: true
+    threshold: 0.20
+    dilation: 16
+    threshold_per_class:
+      class_01: 0.40
+      class_08: 0.40
+  connected_components:
+    enabled: true
+    min_component_area: 16
+    strong_component_threshold: 0.15
+    mean_component_threshold: 0.05
+    binary_threshold: 0.01
+    gaussian_sigma: 0.0
+    connectivity: 2
+
 tuning:
   study_name: patchcore_lite_juan
   direction: maximize

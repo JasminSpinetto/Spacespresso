@@ -11,3 +11,4 @@ torch
 torchvision
 timm
 optuna
+anomalib>=2.0,<2.1

@@ -1,0 +1,106 @@
+seed: 42
+experiment:
+  name: patchcore_lite_juan_full_reproduction
+  owner: juan
+  output_dir: outputs/juan/patchcore_lite_ensemble/full
+data:
+  root: C:\Users\sjuan\Desktop\Spacespresso\data\spacepresso
+  image_size: 224
+  load_images: false
+method:
+  name: ensemble
+  n_splits: 10
+  select_top_k: 10
+  metric: pixel_ap
+  aggregation: mean
+  good_fraction: 1.0
+  anomaly_fraction: 1.0
+  save_checkpoints: true
+  base_method:
+    name: patchcore_lite
+    backbone: wide_resnet50_2
+    batch_size: 4
+    out_indices:
+    - 1
+    - 2
+    - 3
+    coreset_fraction: 0.0031295148132620067
+    candidate_pool_size: 6000
+    max_coreset_size: 1750
+    projection_dim: 256
+    bank_chunk_size: 2048
+    sigma: 5.603276004681255
+training:
+  enabled: true
+  mode: kfold_ensemble
+augmentation:
+  enabled: true
+  copies_per_image: 1
+  include_original: true
+  horizontal_flip_probability: 0.5
+  vertical_flip_probability: 0.0
+  max_rotation_degrees: 7.0
+  max_translate_fraction: 0.04
+  scale_range:
+  - 0.96
+  - 1.04
+  brightness: 0.08
+  contrast: 0.08
+  gaussian_noise_std: 0.01
+  blur_probability: 0.15
+  blur_radius_range:
+  - 0.2
+  - 0.8
+  fill_color:
+  - 0
+  - 0
+  - 0
+prediction_processing:
+  background_suppression:
+    enabled: true
+    threshold: 0.2
+    dilation: 16
+    threshold_per_class:
+      class_01: 0.4
+      class_08: 0.4
+  connected_components:
+    enabled: true
+    min_component_area: 16
+    strong_component_threshold: 0.15
+    mean_component_threshold: 0.05
+    binary_threshold: 0.01
+    gaussian_sigma: 0.0
+    connectivity: 2
+reproduction:
+  best_config_path: outputs\juan\patchcore_lite_tuning\full_optuna\best_config.yaml
+  ensemble_metadata_path: outputs\juan\patchcore_lite_ensemble\full\ensemble_metadata.json
+  fold_metrics_path: outputs/juan/patchcore_lite_ensemble/full/fold_metrics.csv
+  selected_folds:
+  - 9
+  - 1
+  - 8
+  - 5
+  - 2
+  - 0
+  - 4
+  - 7
+  - 3
+  - 6
+  checkpoint_paths:
+  - outputs\juan\patchcore_lite_ensemble\full\selected_models\fold_09\patchcore_lite.pt
+  - outputs\juan\patchcore_lite_ensemble\full\selected_models\fold_01\patchcore_lite.pt
+  - outputs\juan\patchcore_lite_ensemble\full\selected_models\fold_08\patchcore_lite.pt
+  - outputs\juan\patchcore_lite_ensemble\full\selected_models\fold_05\patchcore_lite.pt
+  - outputs\juan\patchcore_lite_ensemble\full\selected_models\fold_02\patchcore_lite.pt
+  - outputs\juan\patchcore_lite_ensemble\full\selected_models\fold_00\patchcore_lite.pt
+  - outputs\juan\patchcore_lite_ensemble\full\selected_models\fold_04\patchcore_lite.pt
+  - outputs\juan\patchcore_lite_ensemble\full\selected_models\fold_07\patchcore_lite.pt
+  - outputs\juan\patchcore_lite_ensemble\full\selected_models\fold_03\patchcore_lite.pt
+  - outputs\juan\patchcore_lite_ensemble\full\selected_models\fold_06\patchcore_lite.pt
+  known_submission_zip: submissions/juan/patchcore_lite_ensemble_full_20260511_031541.zip
+  notes: This file freezes the PatchCore Lite all-10 ensemble settings before juan_experiments.ipynb
+    was repurposed for EfficientAD+DINOv2.
+ranking:
+  output_path: outputs/validation_rankings.csv
+submission:
+  output_path: submissions/juan/patchcore_lite_ensemble_full_reproduction.csv

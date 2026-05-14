@@ -1,0 +1,66 @@
+seed: 42
+
+experiment:
+  name: synthetic_unet_juan
+  owner: juan
+  output_dir: outputs/juan/synthetic_unet_juan
+
+data:
+  root: /content/data/spacepresso
+  image_size: 224
+  load_images: false
+
+method:
+  name: synthetic_unet
+  batch_size: 8
+  epochs: 20
+  steps_per_epoch: 1000
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  base_channels: 24
+  num_workers: 0
+  validation_metric: pixel_ap
+  validation_interval: 1
+  keep_best: true
+  synthetic:
+    clean_probability: 0.15
+    restrict_to_foreground: true
+    foreground_threshold: 0.08
+    min_blobs: 1
+    max_blobs: 4
+    min_area_fraction: 0.002
+    max_area_fraction: 0.08
+    mask_blur_radius: 1.2
+    alpha_min: 0.45
+    alpha_max: 0.9
+    texture_lowres: 24
+    color_weight: 0.45
+    invert_probability: 0.25
+
+training:
+  enabled: true
+  mode: synthetic_anomaly_segmentation
+
+prediction_processing:
+  background_suppression:
+    enabled: true
+    threshold: 0.20
+    dilation: 16
+    threshold_per_class:
+      class_01: 0.40
+      class_08: 0.40
+  connected_components:
+    enabled: true
+    min_component_area: 16
+    strong_component_threshold: 0.15
+    mean_component_threshold: 0.05
+    binary_threshold: 0.01
+    gaussian_sigma: 0.0
+    connectivity: 2
+
+validation:
+  metric: pixel_ap
+  good_sample_size: 200
+
+submission:
+  output_path: submissions/juan/synthetic_unet_juan.csv

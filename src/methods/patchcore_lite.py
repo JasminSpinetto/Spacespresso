@@ -5,6 +5,12 @@ from typing import Any
 
 import numpy as np
 
+from src.common.augmentation import (
+    apply_image_augmentation,
+    augmented_sample_count,
+    deterministic_seed,
+    normalize_augmentation_config,
+)
 from src.methods.base import BaseMethod
 
 
@@ -68,13 +74,17 @@ def _load_image(path: str | Path, image_size: tuple[int, int]) -> np.ndarray:
         return np.asarray(image, dtype=np.float32) / 255.0
 
 
-def _to_tensor_image(sample, image_size: tuple[int, int]):
+def _sample_image_array(sample, image_size: tuple[int, int]) -> np.ndarray:
     _require_dependencies()
     image = sample.image if sample.image is not None else _load_image(sample.image_path, image_size)
     image = np.asarray(image, dtype=np.float32)
     if image.ndim != 3 or image.shape[2] != 3:
         raise ValueError(f"Expected RGB image for {sample.image_id}, got shape {image.shape}")
-    image = np.clip(image, 0.0, 1.0)
+    return np.clip(image, 0.0, 1.0)
+
+
+def _to_tensor_image(sample, image_size: tuple[int, int]):
+    image = _sample_image_array(sample, image_size)
     return torch.from_numpy(image).permute(2, 0, 1).contiguous()
 
 
@@ -294,21 +304,54 @@ def _normalize_maps(raw_predictions: dict[str, np.ndarray]) -> dict[str, np.ndar
 
 
 class _SampleDataset:
-    def __init__(self, samples, image_size: tuple[int, int]):
+    def __init__(
+        self,
+        samples,
+        image_size: tuple[int, int],
+        augmentation_config: dict[str, Any] | None = None,
+        seed: int = 42,
+    ):
         self.samples = list(samples)
         self.image_size = image_size
+        self.augmentation_config = normalize_augmentation_config(augmentation_config)
+        self.seed = int(seed)
+        self.augmentation_enabled = bool(self.augmentation_config["enabled"])
+        if self.augmentation_enabled:
+            self.variants_per_sample = int(self.augmentation_config["copies_per_image"]) + int(
+                bool(self.augmentation_config["include_original"])
+            )
+        else:
+            self.variants_per_sample = 1
+        self.variants_per_sample = max(1, self.variants_per_sample)
 
     def __len__(self) -> int:
-        return len(self.samples)
+        return len(self.samples) * self.variants_per_sample
 
     def __getitem__(self, index: int):
-        sample = self.samples[index]
+        sample_index = index // self.variants_per_sample
+        variant_index = index % self.variants_per_sample
+        sample = self.samples[sample_index]
+        image = _sample_image_array(sample, self.image_size)
+
+        if self._should_augment(variant_index):
+            augmentation_seed = deterministic_seed(self.seed, sample.image_id, variant_index)
+            image = apply_image_augmentation(
+                image,
+                self.augmentation_config,
+                seed=augmentation_seed,
+            )
+
         return {
-            "image": _to_tensor_image(sample, self.image_size),
+            "image": torch.from_numpy(image).permute(2, 0, 1).contiguous(),
             "image_id": sample.image_id,
             "class_name": sample.class_name,
             "path": str(sample.image_path),
         }
+
+    def _should_augment(self, variant_index: int) -> bool:
+        if not self.augmentation_enabled:
+            return False
+        return not (self.augmentation_config["include_original"] and variant_index == 0)
 
 
 class Method(BaseMethod):
@@ -337,6 +380,9 @@ class Method(BaseMethod):
         self.bg_threshold = float(method_config.get("bg_threshold", 0.20))
         self.bg_dilation = int(method_config.get("bg_dilation", 16))
         self.bg_threshold_per_class = dict(method_config.get("bg_threshold_per_class", {}))
+        self.augmentation_config = normalize_augmentation_config(
+            config.get("augmentation", method_config.get("augmentation", {}))
+        )
 
         backbone = method_config.get("backbone", "wide_resnet50_2")
         candidates = method_config.get("backbone_candidates")
@@ -430,8 +476,20 @@ class Method(BaseMethod):
             grouped.setdefault(key, []).append(sample)
         return grouped
 
-    def _make_loader(self, samples, shuffle: bool = False):
-        dataset = _SampleDataset(samples, self.image_size)
+    def _make_loader(self, samples, shuffle: bool = False, augment: bool = False):
+        augmentation_config = self.augmentation_config if augment else None
+        dataset = _SampleDataset(
+            samples,
+            self.image_size,
+            augmentation_config=augmentation_config,
+            seed=self.seed,
+        )
+        if augment and self.augmentation_config["enabled"]:
+            print(
+                "PatchCore augmentation: "
+                f"{len(samples):,} images -> "
+                f"{augmented_sample_count(len(samples), self.augmentation_config):,} variants"
+            )
         return torch.utils.data.DataLoader(
             dataset,
             batch_size=self.batch_size,
@@ -471,7 +529,10 @@ class Method(BaseMethod):
         generator.manual_seed(self.seed)
 
         with torch.no_grad():
-            for batch in tqdm(self._make_loader(samples), desc="PatchCore feature extraction"):
+            for batch in tqdm(
+                self._make_loader(samples, augment=True),
+                desc="PatchCore feature extraction",
+            ):
                 embeddings = self._extract_patch_embeddings(batch["image"])
                 _, h, w, channels = embeddings.shape
                 self.feature_grid_shape = (h, w)
