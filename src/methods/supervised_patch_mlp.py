@@ -239,6 +239,7 @@ class Method(BaseMethod):
         self.hnm_ratio                = int(mc.get("hnm_ratio", 3))  # hard negatives per anomalous patch
         self.sigma                = float(mc.get("sigma", 4.0))
         self.class_wise      = bool(mc.get("class_wise", True))
+        self.tta_aggregation = str(mc.get("tta_aggregation", "mean"))  # "mean" or "max"
 
         device = mc.get("device")
         if device is None:
@@ -256,7 +257,7 @@ class Method(BaseMethod):
     def fit(self, train_data, val_data=None):
         all_samples = list(train_data)
         grouped = self._group(all_samples) if self.class_wise else {GLOBAL_KEY: all_samples}
-        for key, samples in grouped.items():
+        for key, samples in sorted(grouped.items()):
             print(f"\nFitting MLP for {key}: {len(samples)} images "
                   f"({sum(1 for s in samples if s.label == 1)} anomalous)")
             feats, labels, f_mean, f_std = self._build_patch_dataset(samples)
@@ -495,10 +496,16 @@ class Method(BaseMethod):
                                             aug_batch, self.patchsize, self.device)
             B, H, W, C  = patch_feats.shape
             flat        = (patch_feats.reshape(B * H * W, C) - f_mean) / f_std
-            scores      = torch.sigmoid(mlp(flat)).reshape(B, H, W)
-            scores_up   = F.interpolate(
-                scores.unsqueeze(1), size=self.image_size,
-                mode="bilinear", align_corners=False).squeeze(1)
+            logits      = mlp(flat).reshape(B, H, W)
+            if self.tta_aggregation == "logit":
+                # Average in logit space, then apply sigmoid once
+                scores_up = F.interpolate(
+                    logits.unsqueeze(1), size=self.image_size,
+                    mode="bilinear", align_corners=False).squeeze(1)
+            else:
+                scores_up = F.interpolate(
+                    torch.sigmoid(logits).unsqueeze(1), size=self.image_size,
+                    mode="bilinear", align_corners=False).squeeze(1)
 
             # Reverse each transform and collect
             aug_preds = []
@@ -509,7 +516,12 @@ class Method(BaseMethod):
                 pred = np.ascontiguousarray(np.rot90(pred, -k % 4))
                 aug_preds.append(pred)
 
-            amap = np.mean(aug_preds, axis=0).astype(np.float32)
+            if self.tta_aggregation == "max":
+                amap = np.max(aug_preds, axis=0).astype(np.float32)
+            elif self.tta_aggregation == "logit":
+                amap = torch.sigmoid(torch.tensor(np.mean(aug_preds, axis=0))).numpy().astype(np.float32)
+            else:  # mean
+                amap = np.mean(aug_preds, axis=0).astype(np.float32)
             if self.sigma > 0:
                 amap = gaussian_filter(amap, sigma=self.sigma).astype(np.float32)
             predictions[str(s.image_id)] = amap.astype(np.float16)

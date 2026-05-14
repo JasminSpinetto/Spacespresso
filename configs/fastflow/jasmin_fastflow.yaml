@@ -1,0 +1,31 @@
+seed: 43
+
+experiment:
+  name: fastflow_jasmin
+  owner: jasmin
+  output_dir: outputs/jasmin/fastflow
+
+data:
+  root: /content/data/spacepresso
+  image_size: 224
+  load_images: false
+
+method:
+  name: fastflow
+  backbone: wide_resnet50_2
+  out_indices: [2, 3]
+  patchsize: 3
+  batch_size: 16
+  epochs: 100
+  normals_per_epoch: 200   # subsample per epoch per class for speed (~30 min locally)
+  lr: 1.0e-3
+  weight_decay: 1.0e-5
+  proj_channels: 128       # project 1536 → 128 before flow
+  flow_steps: 8            # number of coupling blocks
+  flow_hidden_ratio: 1.0   # hidden channels = proj_channels * ratio
+  sigma: 2.0
+  class_wise: true
+  log_every: 10
+
+submission:
+  output_path: submissions/jasmin/fastflow_jasmin.csv
