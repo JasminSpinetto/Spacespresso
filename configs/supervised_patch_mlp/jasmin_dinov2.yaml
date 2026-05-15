@@ -1,0 +1,40 @@
+seed: 43
+
+experiment:
+  name: supervised_dinov2_mlp_jasmin
+  owner: jasmin
+  output_dir: outputs/jasmin/supervised_dinov2_mlp
+
+data:
+  root: /content/data/spacepresso
+  image_size: 224          # DINOv2 patch_size=14, 224/14=16 patches per side ✓
+  load_images: false
+
+method:
+  name: supervised_patch_mlp
+  backbone: dinov2_vits14  # ViT-S/14 via torch.hub — same as Juan's experiment
+  dinov2_n_layers: 4       # concatenate last 4 transformer blocks → 4×384=1536 dims
+  batch_size: 8
+  out_indices: [2, 3]      # ignored for DINOv2 (uses get_intermediate_layers instead)
+  patchsize: 3             # ignored for DINOv2
+  mlp_hidden: 512
+  mlp_epochs: 20              # Juan: 20 epochs pass 1
+  mlp_lr: 1.0e-3
+  weight_decay: 0.0           # Juan: no weight decay
+  focal_gamma: 2.0
+  focal_alpha: ~
+  augment_anomalies: false    # Juan: no training augmentation
+  normal_patches_per_image: 50
+  max_imbalance_ratio: 100    # Juan: no cap (effectively disabled)
+  mlp_dropout: 0.0
+  hard_negative_mining: true  # Juan: HNM enabled
+  hnm_epochs: 10              # Juan: mlp_epochs // 2
+  hnm_ratio: 3                # Juan: 3× anomalous patches as hard negatives
+  use_lr_scheduler: false     # Juan: constant Adam, no scheduler
+  return_best_state: false    # Juan: returns final state, not best epoch
+  sigma: 4.0
+  tta_aggregation: mean
+  class_wise: true
+
+submission:
+  output_path: submissions/jasmin/supervised_dinov2_mlp_jasmin.csv

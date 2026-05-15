@@ -50,6 +50,10 @@ def _normalize_image_size(s):
 # Feature extractor (same as PatchCore)
 # ---------------------------------------------------------------------------
 
+def _is_dinov2(backbone: str) -> bool:
+    return backbone.startswith("dinov2_")
+
+
 def _build_feature_extractor(backbone, out_indices, image_size, device):
     model = timm.create_model(backbone, pretrained=True, features_only=True, out_indices=out_indices).to(device).eval()
     for p in model.parameters():
@@ -68,6 +72,25 @@ def _build_feature_extractor(backbone, out_indices, image_size, device):
     return model, mean, std, grid_h, grid_w, feat_dim
 
 
+def _build_dinov2_extractor(backbone, n_layers, image_size, device):
+    """Load DINOv2 from torch.hub and probe token grid/dim."""
+    model = torch.hub.load("facebookresearch/dinov2", backbone, pretrained=True).to(device).eval()
+    for p in model.parameters():
+        p.requires_grad_(False)
+    mean = torch.tensor(IMAGENET_MEAN).view(1, 3, 1, 1).to(device)
+    std  = torch.tensor(IMAGENET_STD ).view(1, 3, 1, 1).to(device)
+    with torch.no_grad():
+        h, w = image_size
+        dummy = torch.zeros(1, 3, h, w, device=device)
+        layers = model.get_intermediate_layers((dummy - mean) / std, n=n_layers)
+        tokens = torch.cat(layers, dim=-1)  # (1, n_patches, feat_dim)
+    n_patches = tokens.shape[1]
+    grid_h = grid_w = int(n_patches ** 0.5)
+    feat_dim = tokens.shape[-1]
+    print(f"Backbone: {backbone} | grid={grid_h}×{grid_w} | feat_dim={feat_dim} (n_layers={n_layers})")
+    return model, mean, std, grid_h, grid_w, feat_dim
+
+
 @torch.no_grad()
 def _extract_features(model, mean, std, images_tensor, patchsize, device):
     """Extract and concat multi-scale patch features → (B, H, W, C)."""
@@ -82,6 +105,18 @@ def _extract_features(model, mean, std, images_tensor, patchsize, device):
         processed.append(feat)
     out = torch.cat(processed, dim=1)           # (B, C, H, W)
     return out.permute(0, 2, 3, 1).contiguous() # (B, H, W, C)
+
+
+@torch.no_grad()
+def _extract_dinov2_features(model, mean, std, images_tensor, n_layers, grid_h, grid_w, device):
+    """Extract DINOv2 multi-layer patch tokens → (B, H, W, C)."""
+    images_tensor = images_tensor.to(device, non_blocking=True)
+    x = (images_tensor - mean) / std
+    layers = model.get_intermediate_layers(x, n=n_layers)
+    tokens = torch.cat(layers, dim=-1).float()          # (B, n_patches, feat_dim)
+    tokens = F.normalize(tokens, dim=-1)
+    B = tokens.shape[0]
+    return tokens.reshape(B, grid_h, grid_w, -1).contiguous()  # (B, H, W, C)
 
 
 # ---------------------------------------------------------------------------
@@ -240,14 +275,21 @@ class Method(BaseMethod):
         self.sigma                = float(mc.get("sigma", 4.0))
         self.class_wise      = bool(mc.get("class_wise", True))
         self.tta_aggregation = str(mc.get("tta_aggregation", "mean"))  # "mean" or "max"
+        self.dinov2_n_layers   = int(mc.get("dinov2_n_layers", 4))
+        self.use_lr_scheduler  = bool(mc.get("use_lr_scheduler", True))   # False = constant Adam (Juan)
+        self.return_best_state = bool(mc.get("return_best_state", True))  # False = final state (Juan)
 
         device = mc.get("device")
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = torch.device(device)
 
-        self.model, self.mean, self.std, self.grid_h, self.grid_w, self.feat_dim = \
-            _build_feature_extractor(self.backbone, self.out_indices, self.image_size, self.device)
+        if _is_dinov2(self.backbone):
+            self.model, self.mean, self.std, self.grid_h, self.grid_w, self.feat_dim = \
+                _build_dinov2_extractor(self.backbone, self.dinov2_n_layers, self.image_size, self.device)
+        else:
+            self.model, self.mean, self.std, self.grid_h, self.grid_w, self.feat_dim = \
+                _build_feature_extractor(self.backbone, self.out_indices, self.image_size, self.device)
 
         self.mlps:       dict[str, _MLP]                          = {}
         self.feat_norms: dict[str, tuple["torch.Tensor", "torch.Tensor"]] = {}  # key → (mean, std)
@@ -295,6 +337,14 @@ class Method(BaseMethod):
 
     # ------------------------------------------------------------------
 
+    def _get_features(self, images_tensor) -> "torch.Tensor":
+        """Dispatch to the right feature extractor → (B, H, W, C)."""
+        if _is_dinov2(self.backbone):
+            return _extract_dinov2_features(self.model, self.mean, self.std, images_tensor,
+                                             self.dinov2_n_layers, self.grid_h, self.grid_w, self.device)
+        return _extract_features(self.model, self.mean, self.std, images_tensor,
+                                  self.patchsize, self.device)
+
     def _build_patch_dataset(self, samples):
         loader = torch.utils.data.DataLoader(
             _SampleDataset(samples, self.image_size),
@@ -308,8 +358,7 @@ class Method(BaseMethod):
 
         for batch in tqdm(loader, desc="Extracting patch features", leave=False):
             images    = batch["image"]
-            patch_feats = _extract_features(self.model, self.mean, self.std,
-                                            images, self.patchsize, self.device)
+            patch_feats = self._get_features(images)
             # patch_feats: (B, H, W, C) → (B, H*W, C)
             B, H, W, C = patch_feats.shape
             flat_feats = patch_feats.reshape(B, H * W, C).cpu()
@@ -330,14 +379,20 @@ class Method(BaseMethod):
                             img_aug  = torch.flip(img_aug, dims=[2])   # horizontal flip
                             mask_aug = np.fliplr(mask_aug)
 
-                        aug_feats = _extract_features(
-                            self.model, self.mean, self.std,
-                            img_aug.unsqueeze(0), self.patchsize, self.device
-                        )  # (1, H, W, C)
-                        all_feats.append(aug_feats.reshape(H * W, C).cpu())
-                        all_labels.append(torch.from_numpy(
-                            mask_aug.reshape(-1).astype(np.float32)
-                        ))
+                        aug_feats = self._get_features(img_aug.unsqueeze(0))  # (1, H, W, C)
+                        flat_aug  = aug_feats.reshape(H * W, C).cpu()
+                        mask_flat = torch.from_numpy(mask_aug.reshape(-1).astype(np.float32))
+                        if H * W > 2000:
+                            # Large grid (≥56×56): only keep positive patches to avoid RAM explosion
+                            pos_idx = torch.where(mask_flat > 0)[0]
+                            if len(pos_idx) > 0:
+                                all_feats.append(flat_aug[pos_idx])
+                                all_labels.append(torch.ones(len(pos_idx), dtype=torch.float32))
+                        else:
+                            # Small grid (16×16 or 28×28): keep all patches — non-anomalous
+                            # patches within defect images serve as essential hard negatives
+                            all_feats.append(flat_aug)
+                            all_labels.append(mask_flat)
                 else:
                     # Normal image: randomly subsample to limit memory
                     n_keep = min(self.normal_patches_per_image, H * W)
@@ -398,7 +453,8 @@ class Method(BaseMethod):
         if init_state is not None:
             mlp.load_state_dict(init_state)  # warm-start from previous pass
         optimizer = torch.optim.Adam(mlp.parameters(), lr=self.mlp_lr, weight_decay=self.weight_decay)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(epochs, 1), eta_min=1e-6)
+        if self.use_lr_scheduler:
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(epochs, 1), eta_min=1e-6)
 
         # Compute alpha from class ratio if not set manually
         n_pos   = float(labels.sum().item())
@@ -423,14 +479,19 @@ class Method(BaseMethod):
                 loss.backward()
                 optimizer.step()
                 epoch_loss.append(loss.item())
-            scheduler.step()
+            if self.use_lr_scheduler:
+                scheduler.step()
+                lr_now = scheduler.get_last_lr()[0]
+            else:
+                lr_now = self.mlp_lr
             mean_loss = float(np.mean(epoch_loss))
-            print(f"  [{key}] MLP epoch {epoch:02d}/{epochs} | loss={mean_loss:.5f} | lr={scheduler.get_last_lr()[0]:.2e}")
+            print(f"  [{key}] MLP epoch {epoch:02d}/{epochs} | loss={mean_loss:.5f} | lr={lr_now:.2e}")
             if mean_loss < best_loss:
                 best_loss  = mean_loss
                 best_state = {k: v.clone() for k, v in mlp.state_dict().items()}
 
-        mlp.load_state_dict(best_state)
+        if self.return_best_state:
+            mlp.load_state_dict(best_state)
         mlp.eval()
         return mlp
 
@@ -450,8 +511,7 @@ class Method(BaseMethod):
 
         for batch in tqdm(loader, desc="MLP inference", leave=False):
             images = batch["image"]
-            patch_feats = _extract_features(self.model, self.mean, self.std,
-                                            images, self.patchsize, self.device)
+            patch_feats = self._get_features(images)
             B, H, W, C = patch_feats.shape
             flat = (patch_feats.reshape(B * H * W, C) - f_mean) / f_std  # normalize
             scores = torch.sigmoid(mlp(flat)).reshape(B, H, W)
@@ -492,8 +552,7 @@ class Method(BaseMethod):
                 aug_tensors.append(aug)
 
             aug_batch   = torch.stack(aug_tensors)  # (n_aug, 3, H, W)
-            patch_feats = _extract_features(self.model, self.mean, self.std,
-                                            aug_batch, self.patchsize, self.device)
+            patch_feats = self._get_features(aug_batch)
             B, H, W, C  = patch_feats.shape
             flat        = (patch_feats.reshape(B * H * W, C) - f_mean) / f_std
             logits      = mlp(flat).reshape(B, H, W)

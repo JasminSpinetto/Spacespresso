@@ -14,21 +14,21 @@ method:
   name: supervised_patch_mlp
   backbone: wide_resnet50_2   # same as PatchCore baseline
   batch_size: 8
-  out_indices: [1, 2, 3]
+  out_indices: [2, 3]
   patchsize: 3
-  mlp_hidden: 512
-  mlp_epochs: 35
+  mlp_hidden: 256
+  mlp_epochs: 25
   mlp_lr: 1.0e-3
   weight_decay: 1.0e-5
   focal_gamma: 2.0            # focal loss focusing exponent
   focal_alpha: ~              # null = auto-computed from class ratio (recommended)
   augment_anomalies: true       # rotate anomalous images 0/90/180/270° → 4x more examples
-  normal_patches_per_image: 200  # initial subsample of normal patches per image
+  normal_patches_per_image: 50  # initial subsample of normal patches per image
   max_imbalance_ratio: 10       # after subsampling, further cap normal:anomalous to this ratio
   mlp_dropout: 0.0              # dropout between hidden layers (0 = disabled)
   hard_negative_mining: false   # second pass focusing on hardest normal patches
                                 # 19000 images × 50 patches × 1536 dims × 4B ≈ 5.8 GB
-  sigma: 3.0
+  sigma: 4.0
   tta_aggregation: mean     # "mean", "max", or "logit" — only used when TTA=True
   class_wise: true
 
