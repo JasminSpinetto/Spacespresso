@@ -1,0 +1,35 @@
+seed: 43
+
+experiment:
+  name: supervised_convnext_mlp_jasmin
+  owner: jasmin
+  output_dir: outputs/jasmin/supervised_convnext_mlp
+
+data:
+  root: /content/data/spacepresso
+  image_size: 224
+  load_images: false
+
+method:
+  name: supervised_patch_mlp
+  backbone: convnext_large    # modern CNN, different inductive bias from WR50
+  batch_size: 8
+  out_indices: [1, 2]         # stage1=28×28×384, stage2=14×14×768 → feat_dim=1152
+  patchsize: 3
+  mlp_hidden: 384             # 1:3 ratio of feat_dim (1152)
+  mlp_epochs: 25
+  mlp_lr: 1.0e-3
+  weight_decay: 1.0e-5
+  focal_gamma: 2.0
+  focal_alpha: ~
+  augment_anomalies: true
+  normal_patches_per_image: 50
+  max_imbalance_ratio: 10
+  mlp_dropout: 0.0
+  hard_negative_mining: false
+  sigma: 4.0
+  tta_aggregation: mean
+  class_wise: true
+
+submission:
+  output_path: submissions/jasmin/supervised_convnext_mlp_jasmin.csv

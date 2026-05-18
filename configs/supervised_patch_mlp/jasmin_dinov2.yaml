@@ -12,12 +12,12 @@ data:
 
 method:
   name: supervised_patch_mlp
-  backbone: dinov2_vits14  # ViT-S/14 via torch.hub — same as Juan's experiment
-  dinov2_n_layers: 4       # concatenate last 4 transformer blocks → 4×384=1536 dims
+  backbone: dinov2_vitb14  # ViT-B/14 via torch.hub — larger backbone, 768-dim hidden
+  dinov2_n_layers: 4       # concatenate last 4 transformer blocks → 4×768=3072 dims
   batch_size: 8
   out_indices: [2, 3]      # ignored for DINOv2 (uses get_intermediate_layers instead)
   patchsize: 3             # ignored for DINOv2
-  mlp_hidden: 512
+  mlp_hidden: 1024
   mlp_epochs: 20              # Juan: 20 epochs pass 1
   mlp_lr: 1.0e-3
   weight_decay: 0.0           # Juan: no weight decay
@@ -29,12 +29,13 @@ method:
   mlp_dropout: 0.0
   hard_negative_mining: true  # Juan: HNM enabled
   hnm_epochs: 10              # Juan: mlp_epochs // 2
-  hnm_ratio: 3                # Juan: 3× anomalous patches as hard negatives
+  hnm_ratio: 3               # Juan: 3× anomalous patches as hard negatives
   use_lr_scheduler: false     # Juan: constant Adam, no scheduler
   return_best_state: false    # Juan: returns final state, not best epoch
-  sigma: 4.0
+  sigma: 5.0
   tta_aggregation: mean
   class_wise: true
 
 submission:
   output_path: submissions/jasmin/supervised_dinov2_mlp_jasmin.csv
+

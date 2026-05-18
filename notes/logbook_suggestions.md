@@ -34,4 +34,23 @@ The normal images are your teacher. PatchCore-like methods, memory banks, and fe
 
 PatchCore is a strong beginning, not the whole kingdom. Look also at PaDiM, FastFlow, DRAEM, CFA, RD4AD, UniAD, EfficientAD, or student-teacher methods. Some remember normality, some reconstruct, some distill, some learn flows. Let different families compete before the final ensemble is crowned.
 
+# Advice 8
+“The healthy surface may become a canvas, if the wound you paint with care.”
+
+Inpainting can create useful anomalous regions inside normal images. Remove, replace, or alter local areas, and keep the mask of what changed. The model then learns not only that something is wrong, but where the wrongness begins. 
+
+
+
+# Advice 9
+“When reality gives few wounds, honest scars you may forge.”
+
+Synthetic anomalies can help. Cut, paste, corrupt, scratch, blur, stain, or perturb normal images. The defect may be artificial, but the mask must be precise. A fake scar with a known location can still teach the model where to look. 
+
+
+
+# Advice 10    
+“A loud whisper in one chamber may be silence in another.”
+
+Different categories and views may produce scores with different scales. If one view always speaks louder, it may dominate the ranking unfairly. Normalize carefully, using validation statistics. A score is useful only if its meaning travels well. 
+
 
