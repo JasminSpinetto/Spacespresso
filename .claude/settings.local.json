@@ -16,7 +16,9 @@
       "Bash(\"C:\\\\Users\\\\PC\\\\anaconda3\\\\envs\\\\adl_project\\\\python.exe\" \"c:\\\\Users\\\\PC\\\\Desktop\\\\GITHUB REPO\\\\Spacespresso\\\\notebooks\\\\_patch7.py\")",
       "Bash(\"C:\\\\Users\\\\PC\\\\anaconda3\\\\envs\\\\adl_project\\\\python.exe\" \"c:\\\\Users\\\\PC\\\\Desktop\\\\GITHUB REPO\\\\Spacespresso\\\\notebooks\\\\_patch8.py\")",
       "Bash(where python *)",
-      "Bash(jupyter kernelspec *)"
+      "Bash(jupyter kernelspec *)",
+      "Bash(python fix_standalone.py)",
+      "Bash(del fix_standalone.py)"
     ]
   }
 }
