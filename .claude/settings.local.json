@@ -18,7 +18,8 @@
       "Bash(where python *)",
       "Bash(jupyter kernelspec *)",
       "Bash(python fix_standalone.py)",
-      "Bash(del fix_standalone.py)"
+      "Bash(del fix_standalone.py)",
+      "Bash(python make_colab.py)"
     ]
   }
 }
