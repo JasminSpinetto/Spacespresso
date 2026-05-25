@@ -19,7 +19,9 @@
       "Bash(jupyter kernelspec *)",
       "Bash(python fix_standalone.py)",
       "Bash(del fix_standalone.py)",
-      "Bash(python make_colab.py)"
+      "Bash(python make_colab.py)",
+      "Bash(more)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\PC\\\\Desktop\\\\GITHUB REPO\\\\Spacespresso\" -Recurse -Force | Select-Object -ExpandProperty FullName | Sort-Object | ForEach-Object { $_ })"
     ]
   }
 }
