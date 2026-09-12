@@ -125,7 +125,6 @@ where `P_n` and `R_n` are the precision and recall at the `n`-th threshold. This
 ## Repository Structure
 
 ```text
-notebooks/        # one experiment notebook per team member
 src/common/       # shared data, q8rle, submission, config, visualization, runner utilities
 src/methods/      # global plug-and-play method implementations
 configs/          # experiment-specific and member-specific YAML configs
@@ -135,29 +134,6 @@ report/           # report material
 experiments.csv   # experiment tracker
 ```
 
-Methods are global. Configs are experiment-specific and may be member-specific. Outputs and submissions are member-specific.
-
-## Running A Member Notebook
-
-Each team member owns a notebook under `notebooks/` and a config under `configs/`.
-
-Typical flow:
-
-1. Load a YAML config.
-2. Set the seed.
-3. Initialize `SpacepressoDataModule`.
-4. Load `train/good`, optional labeled anomalies for sanity checks, and `test`.
-5. Instantiate the method with `get_method_class(config["method"]["name"])`.
-6. Run `ExperimentRunner.fit(...)` and `ExperimentRunner.predict(...)`.
-7. Write a CSV with `SubmissionWriter`.
-
-From notebooks, run imports from the repo root:
-
-```python
-from src.common.config import load_config
-from src.common.data import SpacepressoDataModule
-from src.methods import get_method_class
-```
 
 ## PatchCore Lite Baseline
 
@@ -250,42 +226,4 @@ class Method(BaseMethod):
 }
 ```
 
-## Submissions
-
-Submission CSVs use:
-
-```text
-ID,Label
-```
-
-`Label` is q8rle-encoded from a 2D anomaly score map. Use `src/common/submission.py`; do not duplicate q8rle or CSV-writing logic in notebooks.
-
-Member submission folders:
-
-```text
-submissions/juan/
-submissions/jasmin/
-submissions/camilo/
-submissions/reinaldo/
-submissions/final/
-```
-
-Member output folders:
-
-```text
-outputs/juan/
-outputs/jasmin/
-outputs/camilo/
-outputs/reinaldo/
-outputs/final/
-```
-
 Generated outputs, model weights, checkpoints, and CSV submissions are ignored by git. `.gitkeep` files keep the folder structure.
-
-## Project Rules
-
-- Put reusable utilities in `src/common/`.
-- Put method implementations in `src/methods/`.
-- Keep notebooks orchestration-only.
-- Do not duplicate data loading, q8rle, submission creation, or PatchCore logic in notebooks.
-- Track experiments in `experiments.csv`.
