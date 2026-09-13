@@ -1,4 +1,4 @@
-# Spacespresso — Advanced Deep Learning Project 2025/2026
+# Spacespresso - Advanced Deep Learning Project 2025/2026
 
 Pixel-level anomaly detection for **Mission: Spacepresso**, the Advanced Deep Learning (ADL) challenge at Politecnico di Milano, A.Y. 2025/2026.
 
@@ -16,10 +16,10 @@ Pixel-level anomaly detection for **Mission: Spacepresso**, the Advanced Deep Le
 
 ## Team Members
 
-- Jasmin Spinetto — [@JasminSpinetto](https://github.com/JasminSpinetto)
-- Camilo A. Martínez-Mejía — [@camiloa2m](https://github.com/camiloa2m)
-- Juan Martín Sánchez Bardellini — [@jmsb505](https://github.com/jmsb505)
-- Reinaldo Toledo — [@Rey7910](https://github.com/Rey7910)
+- Jasmin Spinetto [@JasminSpinetto](https://github.com/JasminSpinetto)
+- Camilo A. Martínez-Mejía [@camiloa2m](https://github.com/camiloa2m)
+- Juan Martín Sánchez Bardellini [@jmsb505](https://github.com/jmsb505)
+- Reinaldo Toledo [@Rey7910](https://github.com/Rey7910)
 
 ## Project Overview
 
