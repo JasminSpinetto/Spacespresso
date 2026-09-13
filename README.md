@@ -2,7 +2,7 @@
 
 Pixel-level anomaly detection for **Mission: Spacepresso**, the Advanced Deep Learning (ADL) challenge at Politecnico di Milano, A.Y. 2025/2026.
 
-📄 **[Final Report (PDF)](report/Avengers_Don't_Lose_Report.pdf)** - team *Avengers Don't Lose*.
+📄 **[Final Report (PDF)](report/Avengers_Don't_Lose_Report.pdf)**.
 
 ## Course Information
 
